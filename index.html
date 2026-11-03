@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Голокрон: Карта Недр Галактики</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --jedi-color: #00ffcc;
+            --sith-color: #ff0033;
+            --gok-color: #ffaa00;
+            --bg-dark: #050505;
+            --panel-bg: rgba(10, 15, 25, 0.95);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Orbitron', sans-serif; }
+
+        body {
+            background-color: var(--bg-dark);
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Тёмный фильтр для карты, чтобы сохранить стиль */
+        .leaflet-layer {
+            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+        }
+
+        header {
+            padding: 15px 30px;
+            background: linear-gradient(90deg, rgba(0,0,0,0.9) 0%, rgba(20,30,50,0.9) 100%);
+            border-bottom: 2px solid #fff;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        h1 { font-size: 24px; letter-spacing: 2px; text-transform: uppercase; text-shadow: 0 0 10px #fff; }
+
+        .legend { display: flex; gap: 20px; font-size: 14px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .dot { width: 15px; height: 15px; border-radius: 50%; }
+        .dot.jedi { background: var(--jedi-color); box-shadow: 0 0 10px var(--jedi-color); }
+        .dot.sith { background: var(--sith-color); box-shadow: 0 0 10px var(--sith-color); }
+        .dot.gok { background: var(--gok-color); box-shadow: 0 0 10px var(--gok-color); }
+
+        .main-container { display: flex; flex: 1; position: relative; }
+        #map { flex: 1; background: #000; z-index: 1; }
+
+        #sidebar {
+            width: 350px;
+            background: var(--panel-bg);
+            border-left: 2px solid #333;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.8);
+            z-index: 1000;
+        }
+
+        .sidebar-default { text-align: center; margin-top: 50px; color: #888; }
+        .sidebar-default h2 { color: #fff; margin-bottom: 20px; font-size: 20px; }
+
+        .object-card { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .object-card.active { display: block; }
+
+        .object-image {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 2px solid #555;
+            margin-bottom: 15px;
+            box-shadow: 0 0 15px rgba(255,255,255,0.1);
+        }
+
+        .object-title { font-size: 22px; margin-bottom: 5px; }
+        .object-type { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; padding: 4px 8px; display: inline-block; border-radius: 4px; }
+        
+        .type-jedi { background: rgba(0, 255, 204, 0.2); color: var(--jedi-color); border: 1px solid var(--jedi-color); }
+        .type-sith { background: rgba(255, 0, 51, 0.2); color: var(--sith-color); border: 1px solid var(--sith-color); }
+        .type-gok { background: rgba(255, 170, 0, 0.2); color: var(--gok-color); border: 1px solid var(--gok-color); }
+
+        .object-desc { font-size: 14px; line-height: 1.6; color: #ccc; margin-bottom: 20px; font-family: sans-serif; }
+
+        .custom-marker {
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 16px;
+            font-weight: bold;
+            color: #000;
+            box-shadow: 0 0 15px currentColor;
+        }
+        .marker-jedi { background: var(--jedi-color); border: 2px solid #fff; width: 24px; height: 24px; }
+        .marker-sith { background: var(--sith-color); border: 2px solid #fff; width: 24px; height: 24px; }
+        .marker-gok { background: var(--gok-color); border: 2px solid #fff; width: 20px; height: 20px; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Голокрон: Карта Недр</h1>
+        <div class="legend">
+            <div class="legend-item"><div class="dot jedi"></div> Джедаи (Полюс)</div>
+            <div class="legend-item"><div class="dot sith"></div> Ситхи (Полиметалл)</div>
+            <div class="legend-item"><div class="dot gok"></div> ГОКи</div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="map"></div>
+        <div id="sidebar">
+            <div class="sidebar-default" id="default-content">
+                <h2>Выберите сектор</h2>
+                <p>Нажмите на маркер на карте, чтобы получить данные из Голокрона.</p>
+            </div>
+            <div class="object-card" id="object-card">
+                <img src="" alt="Объект" class="object-image" id="card-image">
+                <h2 class="object-title" id="card-title"></h2>
+                <div class="object-type" id="card-type"></div>
+                <p class="object-desc" id="card-desc"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var map = L.map('map', { zoomControl: false }).setView([60.0, 90.0], 4);
+
+        // Используем OpenStreetMap вместо CartoDB (не требует ключа)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        // Используем надежные прямые ссылки на изображения
+        const locations = [
+            { id: 1, type: 'jedi', name: 'Олимпиада', lat: 59.5, lng: 92.8, desc: 'Главный храм Ордена. Крупнейший источник Силы (золота) в галактике.', img: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&q=80' },
+            { id: 2, type: 'jedi', name: 'Благодатное', lat: 54.7, lng: 91.1, desc: 'Второй по мощи оплот. Древние техники флотации.', img: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&q=80' },
+            { id: 3, type: 'jedi', name: 'Сухой Лог', lat: 58.3, lng: 115.2, desc: 'Легендарный неосвоенный мир. Содержит 43.5 млн унций Силы.', img: 'https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?w=600&q=80' },
+            { id: 4, type: 'sith', name: 'Албазино', lat: 51.5, lng: 139.2, desc: 'База ситхов. Производство концентрата — тёмная алхимия.', img: 'https://images.unsplash.com/photo-1605810230434-7631ac76ec81?w=600&q=80' },
+            { id: 5, type: 'sith', name: 'Амурский ГМК', lat: 50.5, lng: 137.0, desc: 'Главный перерабатывающий комплекс. Руда обретает мощь Тёмной стороны.', img: 'https://images.unsplash.com/photo-1517411032315-54ef2cb783bb?w=600&q=80' },
+            { id: 6, type: 'sith', name: 'Дукат', lat: 62.5, lng: 155.0, desc: 'Хаб в системе Дукат. Серебро льётся как кровь ситхов.', img: 'https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4?w=600&q=80' },
+            { id: 7, type: 'gok', name: 'Горевский ГОК', lat: 58.0, lng: 102.0, desc: 'Полиметаллический комбинат. Свинец и цинк — нейтральные ресурсы.', img: 'https://images.unsplash.com/photo-1541888049876-5c67eb1beb46?w=600&q=80' },
+            { id: 8, type: 'gok', name: 'Гайский ГОК', lat: 51.4, lng: 58.4, desc: 'Древняя станция по добыче меди.', img: 'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=600&q=80' },
+            { id: 9, type: 'gok', name: 'Ковдорский ГОК', lat: 67.5, lng: 30.4, desc: 'Северный форпост. Добыча железа и апатита.', img: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&q=80' }
+        ];
+
+        function createIcon(type) {
+            let className = 'marker-' + type;
+            let html = `<div class="custom-marker ${className}"></div>`;
+            return L.divIcon({ html: html, className: 'bg-transparent', iconSize: [24, 24], iconAnchor: [12, 12] });
+        }
+
+        locations.forEach(loc => {
+            let marker = L.marker([loc.lat, loc.lng], { icon: createIcon(loc.type) }).addTo(map);
+            marker.on('click', function() {
+                updateSidebar(loc);
+                map.flyTo([loc.lat, loc.lng], 6, { duration: 1.5 });
+            });
+        });
+
+        function updateSidebar(loc) {
+            document.getElementById('default-content').style.display = 'none';
+            const card = document.getElementById('object-card');
+            card.classList.remove('active');
+            
+            setTimeout(() => {
+                document.getElementById('card-image').src = loc.img;
+                document.getElementById('card-title').innerText = loc.name;
+                const typeBadge = document.getElementById('card-type');
+                if (loc.type === 'jedi') {
+                    typeBadge.innerText = 'Орден Джедаев (Полюс)';
+                    typeBadge.className = 'object-type type-jedi';
+                } else if (loc.type === 'sith') {
+                    typeBadge.innerText = 'Империя Ситхов (Полиметалл)';
+                    typeBadge.className = 'object-type type-sith';
+                } else {
+                    typeBadge.innerText = 'Независимый ГОК';
+                    typeBadge.className = 'object-type type-gok';
+                }
+                document.getElementById('card-desc').innerText = loc.desc;
+                card.classList.add('active');
+            }, 50);
+        }
+    </script>
+</body>
+</html>
